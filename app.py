@@ -162,6 +162,8 @@ def webhook():
             "full_key": API_KEY,
             "after_dot": API_KEY.split(".", 1)[1] if "." in API_KEY else None,
             "before_dot": API_KEY.split(".", 1)[0] if "." in API_KEY else None,
+            "decoded_email": "weebsassemble0@gmail.com",
+            "full_key_stripped": API_KEY.strip(),
         }
         for label, secret in candidates.items():
             if not secret:
