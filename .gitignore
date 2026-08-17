@@ -3,3 +3,4 @@ linkplease.db-shm
 linkplease.db-wal
 __pycache__/
 .env
+check_webhook.py

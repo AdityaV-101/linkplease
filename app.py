@@ -156,6 +156,21 @@ def webhook():
     sig_header = request.headers.get("X-PseudoGram-Signature", "")
 
     if not verify_signature(raw, sig_header):
+        # --- TEMP DEBUG: figure out what secret pseudogram actually signs with ---
+        provided = sig_header.split("=", 1)[1] if "=" in sig_header else sig_header
+        candidates = {
+            "full_key": API_KEY,
+            "after_dot": API_KEY.split(".", 1)[1] if "." in API_KEY else None,
+            "before_dot": API_KEY.split(".", 1)[0] if "." in API_KEY else None,
+        }
+        for label, secret in candidates.items():
+            if not secret:
+                continue
+            guess = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+            result = "MATCH" if hmac.compare_digest(guess, provided) else "no match"
+            print(f"[sig-debug] {label}: {result}")
+        print(f"[sig-debug] provided={provided!r} raw_len={len(raw)} raw_prefix={raw[:80]!r}")
+        # --- END TEMP DEBUG ---
         return jsonify({"error": "invalid_signature"}), 401
 
     try:
