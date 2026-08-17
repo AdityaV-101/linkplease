@@ -463,6 +463,8 @@ def sender_loop():
             bump_attempts_and_maybe_fail(task_id, attempts)
             continue
 
+        print(f"[send-debug] task={task_id} attempt={attempts} status={resp.status_code} body={resp.text[:200]}", flush=True)
+
         if resp.status_code == 202:
             body = resp.json()
             mark_status(task_id, "queued", dm_id=body.get("dm_id"))
@@ -504,6 +506,8 @@ def poller_loop():
             except requests.RequestException as e:
                 print(f"[poller] network error checking dm {dm_id}: {e}")
                 continue
+
+            print(f"[poll-debug] task={task_id} dm_id={dm_id} status_code={resp.status_code} body={resp.text[:200]}", flush=True)
 
             if resp.status_code == 200:
                 status = resp.json().get("status")
