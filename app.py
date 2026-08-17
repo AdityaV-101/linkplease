@@ -168,8 +168,8 @@ def webhook():
                 continue
             guess = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
             result = "MATCH" if hmac.compare_digest(guess, provided) else "no match"
-            print(f"[sig-debug] {label}: {result}")
-        print(f"[sig-debug] provided={provided!r} raw_len={len(raw)} raw_prefix={raw[:80]!r}")
+            print(f"[sig-debug] {label}: {result}", flush=True)
+        print(f"[sig-debug] provided={provided!r} raw_len={len(raw)} raw_prefix={raw[:80]!r}", flush=True)
         # --- END TEMP DEBUG ---
         return jsonify({"error": "invalid_signature"}), 401
 
