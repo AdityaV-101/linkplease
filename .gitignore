@@ -1,1 +1,5 @@
-linkplease.db linkplease.db-shm linkplease.db-wal __pycache__/ .env
+linkplease.db
+linkplease.db-shm
+linkplease.db-wal
+__pycache__/
+.env
