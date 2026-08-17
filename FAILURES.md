@@ -57,3 +57,19 @@ Honest list, most to least likely to actually bite:
   This is intentional (see the Loom) — it removes an entire class of race conditions for the
   cost of some throughput — but it means DB contention, not the mock API's rate limit, would
   be the actual bottleneck if load went materially above what was tested (500 events / 10s).
+
+- **Pseudogram signs webhooks with the base64-decoded email from the API key, not the
+  literal API key string** — contradicts the docs ("HMAC-SHA256 of the raw request body
+  using your API key as the secret"). Found via debug logging that tried the full key, and
+  the substrings before/after the `.`, against the real signature on 5 separate real
+  requests — only the decoded email matched, every time. verify_signature() now derives
+  the signing secret by decoding the email from the key's prefix.
+
+- **`/v1/dm/send` actually returns HTTP `200` with an already-terminal status embedded
+  in the body** (e.g. `{"dm_id":...,"status":"delivered"}`), not `202` with
+  `{"status":"queued"}` as documented. My original code only recognized `202` as success,
+  so every real `200` response fell into the retry path — meaning a task that had ALREADY
+  been delivered got retried anyway, sending a genuine duplicate real DM to the same
+  user. Confirmed via debug logging showing 3 separate real dm_ids issued for what should
+  have been 1 send. Fixed by checking both status codes and always reading `status` from
+  the body.
