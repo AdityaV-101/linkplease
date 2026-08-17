@@ -19,6 +19,7 @@ SQLite, not in memory, so a process restart does not lose in-flight work (see FA
 for the real remaining edge cases).
 """
 
+import base64 as _b64
 import hashlib
 import hmac
 import json
@@ -39,6 +40,19 @@ from flask import Flask, jsonify, request
 # ---------------------------------------------------------------------------
 
 API_KEY = os.environ.get("PSEUDOGRAM_API_KEY", "")
+
+
+def _derive_signing_secret(api_key):
+    if "." in api_key:
+        prefix = api_key.split(".", 1)[0]
+        try:
+            return _b64.b64decode(prefix).decode("utf-8")
+        except Exception:
+            return api_key
+    return api_key
+
+
+SIGNING_SECRET = _derive_signing_secret(API_KEY)
 BASE_URL = os.environ.get("PSEUDOGRAM_BASE_URL", "https://pseudogram-api.onrender.com")
 DB_PATH = os.environ.get("LINKPLEASE_DB_PATH", "linkplease.db")
 
@@ -137,7 +151,7 @@ def verify_signature(raw_body: bytes, header_value: str) -> bool:
         # No key configured means we cannot verify anything — fail closed.
         return False
     provided = header_value.split("=", 1)[1]
-    expected = hmac.new(API_KEY.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    expected = hmac.new(SIGNING_SECRET.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(provided, expected)
 
 
@@ -156,23 +170,6 @@ def webhook():
     sig_header = request.headers.get("X-PseudoGram-Signature", "")
 
     if not verify_signature(raw, sig_header):
-        # --- TEMP DEBUG: figure out what secret pseudogram actually signs with ---
-        provided = sig_header.split("=", 1)[1] if "=" in sig_header else sig_header
-        candidates = {
-            "full_key": API_KEY,
-            "after_dot": API_KEY.split(".", 1)[1] if "." in API_KEY else None,
-            "before_dot": API_KEY.split(".", 1)[0] if "." in API_KEY else None,
-            "decoded_email": "weebsassemble0@gmail.com",
-            "full_key_stripped": API_KEY.strip(),
-        }
-        for label, secret in candidates.items():
-            if not secret:
-                continue
-            guess = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
-            result = "MATCH" if hmac.compare_digest(guess, provided) else "no match"
-            print(f"[sig-debug] {label}: {result}", flush=True)
-        print(f"[sig-debug] provided={provided!r} raw_len={len(raw)} raw_prefix={raw[:80]!r}", flush=True)
-        # --- END TEMP DEBUG ---
         return jsonify({"error": "invalid_signature"}), 401
 
     try:
