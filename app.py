@@ -443,12 +443,6 @@ def sender_loop():
 
         rate_limit_wait()
 
-        # Idempotency key is scoped to THIS attempt number, not just the task.
-        # Reusing the same key across a crash+restart of the same attempt is
-        # exactly what protects against a duplicate real send (see FAILURES.md).
-        # But reusing it for a NEW attempt after pseudogram already terminally
-        # failed the previous one would just hand back the same failed dm_id
-        # forever — so each attempt gets its own key.
         idempotency_key = f"task-{task_id}-{attempts}"
 
         try:
@@ -463,19 +457,20 @@ def sender_loop():
             bump_attempts_and_maybe_fail(task_id, attempts)
             continue
 
-        print(f"[send-debug] task={task_id} attempt={attempts} status={resp.status_code} body={resp.text[:200]}", flush=True)
-
-        if resp.status_code == 202:
-            body = resp.json()
-            mark_status(task_id, "queued", dm_id=body.get("dm_id"))
-        elif resp.status_code == 429:
-            # This is a signal about the WHOLE key, not just this task — pause
-            # the entire sender rather than just rescheduling this one row,
-            # otherwise the next loop iteration just grabs a different pending
-            # task and gets 429'd again immediately.
+        if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", "5"))
             with _rate_lock:
                 _global_pause_until = max(_global_pause_until, time.time() + retry_after)
+        elif resp.status_code in (200, 202):
+            body = resp.json()
+            dm_id = body.get("dm_id")
+            dm_status = body.get("status", "queued")
+            if dm_status == "delivered":
+                mark_status(task_id, "delivered", dm_id=dm_id)
+            elif dm_status == "failed":
+                schedule_post_accept_retry(task_id, attempts)
+            else:
+                mark_status(task_id, "queued", dm_id=dm_id)
         elif resp.status_code == 500:
             bump_attempts_and_maybe_fail(task_id, attempts)
         elif resp.status_code == 400:
@@ -506,8 +501,6 @@ def poller_loop():
             except requests.RequestException as e:
                 print(f"[poller] network error checking dm {dm_id}: {e}")
                 continue
-
-            print(f"[poll-debug] task={task_id} dm_id={dm_id} status_code={resp.status_code} body={resp.text[:200]}", flush=True)
 
             if resp.status_code == 200:
                 status = resp.json().get("status")
